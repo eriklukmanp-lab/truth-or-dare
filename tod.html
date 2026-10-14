@@ -437,4 +437,176 @@
                 return;
             }
 
- 
+            const randomItem = filtered[Math.floor(Math.random() * filtered.length)];
+            currentActiveQuestion = randomItem;
+
+            box.innerText = `[${randomItem.type.toUpperCase()}] ${randomItem.text}`;
+            form.classList.remove('hidden');
+            document.getElementById('player-answer').value = '';
+            document.getElementById('player-photo').value = '';
+
+            // kunci tombol agar tidak bisa ditekan lagi
+            btnTruth.disabled = true;
+            btnDare.disabled = true;
+            lockMsg.classList.remove('hidden');
+
+            if (randomItem.type === 'dare') {
+                photoSection.classList.remove('hidden');
+                label.innerText = "Tulis Respon / Catatan Tantangan:";
+            } else {
+                photoSection.classList.add('hidden');
+                label.innerText = "Isi Jawaban Kejujuran:";
+            }
+        }
+
+        function submitAnswer() {
+            const answerText = document.getElementById('player-answer').value.trim();
+            const photoInput = document.getElementById('player-photo');
+            
+            if (!answerText && (currentActiveQuestion.type === 'truth' || photoInput.files.length === 0)) {
+                alert('Mohon isi jawaban atau lampirkan foto buktinya!');
+                return;
+            }
+
+            if (photoInput.files && photoInput.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    saveAnswerToStorage(answerText, e.target.result);
+                };
+                reader.readAsDataURL(photoInput.files[0]);
+            } else {
+                saveAnswerToStorage(answerText, null);
+            }
+        }
+
+        function saveAnswerToStorage(ansText, photoData) {
+            const newAnswer = {
+                id: Date.now(),
+                question: currentActiveQuestion.text,
+                type: currentActiveQuestion.type,
+                answer: ansText || "Menyelesaikan tantangan tanpa catatan.",
+                photo: photoData,
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            };
+
+            answers.unshift(newAnswer);
+            localStorage.setItem('tod_answers_db', JSON.stringify(answers));
+
+            alert('Berhasil dikirim ke Admin! 🎉');
+            
+            // Reset & buka kembali kuncinya
+            document.getElementById('player-answer').value = '';
+            document.getElementById('player-photo').value = '';
+            document.getElementById('answer-form').classList.add('hidden');
+            document.getElementById('challenge-box').innerText = "Klik tombol Truth atau Dare di atas!";
+            
+            document.getElementById('btn-truth').disabled = false;
+            document.getElementById('btn-dare').disabled = false;
+            document.getElementById('lock-msg').classList.add('hidden');
+        }
+
+        // --- LOGIKA ADMIN & MODAL ZOOM FOTO ---
+        function openImageModal(imgSrc) {
+            document.getElementById('modal-img-src').src = imgSrc;
+            document.getElementById('image-modal').classList.remove('hidden');
+        }
+
+        function closeImageModal() {
+            document.getElementById('image-modal').classList.add('hidden');
+        }
+
+        function showAdminTab(tab) {
+            if (tab === 'crud') {
+                document.getElementById('admin-tab-crud').classList.remove('hidden');
+                document.getElementById('admin-tab-inbox').classList.add('hidden');
+                document.getElementById('tab-btn-crud').className = "btn";
+                document.getElementById('tab-btn-inbox').className = "btn btn-secondary";
+                renderCrudList();
+            } else {
+                document.getElementById('admin-tab-crud').classList.add('hidden');
+                document.getElementById('admin-tab-inbox').classList.remove('hidden');
+                document.getElementById('tab-btn-crud').className = "btn btn-secondary";
+                document.getElementById('tab-btn-inbox').className = "btn";
+                renderInboxList();
+            }
+        }
+
+        function saveChallenge() {
+            const type = document.getElementById('crud-type').value;
+            const text = document.getElementById('crud-text').value.trim();
+
+            if (!text) {
+                alert('Teks tidak boleh kosong!');
+                return;
+            }
+
+            questions.unshift({ id: Date.now(), type, text });
+            localStorage.setItem('tod_questions_db', JSON.stringify(questions));
+            document.getElementById('crud-text').value = '';
+            renderCrudList();
+            alert('Pertanyaan berhasil ditambah!');
+        }
+
+        function deleteQuestion(id) {
+            questions = questions.filter(q => q.id !== id);
+            localStorage.setItem('tod_questions_db', JSON.stringify(questions));
+            renderCrudList();
+        }
+
+        function renderCrudList() {
+            const container = document.getElementById('crud-list');
+            container.innerHTML = '';
+            if (questions.length === 0) {
+                container.innerHTML = '<p style="font-size:11px; text-align:center;">Belum ada pertanyaan.</p>';
+                return;
+            }
+            questions.forEach(q => {
+                const div = document.createElement('div');
+                div.className = 'item-list';
+                div.style.borderLeftColor = q.type === 'truth' ? '#6366f1' : '#f43f5e';
+                div.innerHTML = `
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <div><strong style="color:${q.type==='truth'?'#818cf8':'#fb7185'}">[${q.type.toUpperCase()}]</strong> ${q.text}</div>
+                        <button onclick="deleteQuestion(${q.id})" style="background:none; border:none; color:#f87171; cursor:pointer; font-weight:bold; font-size:11px;">Hapus</button>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        function renderInboxList() {
+            const container = document.getElementById('inbox-list');
+            container.innerHTML = '';
+            if (answers.length === 0) {
+                container.innerHTML = '<p style="font-size:11px; text-align:center;">Belum ada jawaban masuk.</p>';
+                return;
+            }
+            answers.forEach(a => {
+                const div = document.createElement('div');
+                div.className = 'item-list';
+                div.style.borderLeftColor = '#34d399';
+                
+                let photoHtml = '';
+                if (a.photo) {
+                    photoHtml = `<img src="${a.photo}" class="proof-img" onclick="openImageModal('${a.photo}')" title="Klik untuk memperbesar">`;
+                }
+
+                div.innerHTML = `
+                    <div style="font-size:10px; color:#94a3b8; margin-bottom:2px;">⏰ ${a.time} • <strong style="color:${a.type==='truth'?'#818cf8':'#fb7185'}">${a.type.toUpperCase()}</strong></div>
+                    <div style="font-weight:600; color:#cbd5e1; margin-bottom:4px;">❓ ${a.question}</div>
+                    <div style="color:#34d399; font-weight:600; margin-bottom: 4px;">💬 Respon: "${a.answer}"</div>
+                    ${photoHtml}
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        function clearInbox() {
+            if (!confirm('Hapus semua inbox jawaban?')) return;
+            answers = [];
+            localStorage.setItem('tod_answers_db', JSON.stringify(answers));
+            renderInboxList();
+        }
+    </script>
+</body>
+</html>
