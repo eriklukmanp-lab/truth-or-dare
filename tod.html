@@ -85,10 +85,17 @@
             font-size: 13px;
             cursor: pointer;
             box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4);
-            transition: transform 0.1s;
+            transition: transform 0.1s, opacity 0.2s;
         }
 
         .btn:active { transform: scale(0.97); }
+
+        .btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            transform: none !important;
+            box-shadow: none !important;
+        }
 
         .btn-dare {
             background: linear-gradient(135deg, #f43f5e, #fb7185);
@@ -203,6 +210,16 @@
             object-fit: contain;
         }
 
+        .lock-warning {
+            font-size: 11px;
+            color: #fb7185;
+            background: rgba(244, 63, 94, 0.15);
+            border: 1px solid rgba(244, 63, 94, 0.3);
+            padding: 8px 12px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+        }
+
         footer {
             text-align: center;
             font-size: 11px;
@@ -232,7 +249,7 @@
             <!-- Form Password Admin -->
             <div id="admin-login-box" class="hidden" style="margin-top: 14px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 12px;">
                 <p style="font-size: 11px; margin-bottom: 6px;">Masukkan Password Admin:</p>
-                <input type="password" id="admin-pass" placeholder=>
+                <input type="password" id="admin-pass" placeholder="Default: 1234">
                 <button onclick="verifyAdminPassword()" class="btn" style="padding: 10px;">Login Admin</button>
             </div>
         </section>
@@ -243,8 +260,13 @@
             <p>Pilih Truth atau Dare di bawah ini!</p>
 
             <div style="display: flex; gap: 10px; margin-bottom: 10px;">
-                <button onclick="getChallenge('truth')" class="btn">Truth 💙</button>
-                <button onclick="getChallenge('dare')" class="btn btn-dare">Dare 🔥</button>
+                <button id="btn-truth" onclick="getChallenge('truth')" class="btn">Truth 💙</button>
+                <button id="btn-dare" onclick="getChallenge('dare')" class="btn btn-dare">Dare 🔥</button>
+            </div>
+
+            <!-- Pesan Peringatan Terkunci -->
+            <div id="lock-msg" class="lock-warning hidden">
+                🔒 Pertanyaan sudah dikunci! Kamu wajib menjawab/menyelesaikan tantangan ini sebelum lanjut.
             </div>
 
             <div id="challenge-box" class="challenge-display">
@@ -264,7 +286,7 @@
                     <input type="file" id="player-photo" accept="image/*" style="padding: 6px; margin-top: 4px;">
                 </div>
 
-                <button onclick="submitAnswer()" class="btn">Kirim ke Admin 🚀</button>
+                <button onclick="submitAnswer()" class="btn">Kirim & Buka Kunci 🚀</button>
             </div>
         </section>
 
@@ -284,6 +306,138 @@
                     <label style="font-size: 11px; color: #cbd5e1;">Tipe:</label>
                     <select id="crud-type">
                         <option value="truth">Truth (Kejujuran)</option>
+                        <option value="dare">Dare (Tantangan)</option>
+                    </select>
+
+                    <label style="font-size: 11px; color: #cbd5e1;">Teks Pertanyaan / Tantangan:</label>
+                    <input type="text" id="crud-text" placeholder="Masukkan teks baru...">
+                </div>
+
+                <button onclick="saveChallenge()" class="btn" style="margin-bottom: 14px;">+ Tambah Pertanyaan</button>
+
+                <h3 style="font-size: 12px; text-align: left; margin-bottom: 6px; color: #cbd5e1;">Daftar Pertanyaan:</h3>
+                <div id="crud-list" style="max-height: 160px; overflow-y: auto;"></div>
+            </div>
+
+            <!-- TAB 2: INBOX JAWABAN & FOTO -->
+            <div id="admin-tab-inbox" class="hidden">
+                <h3 style="font-size: 12px; text-align: left; margin-bottom: 6px; color: #cbd5e1;">Histori Jawaban Teman:</h3>
+                <p style="font-size: 10px; color: #94a3b8; margin-bottom: 8px; text-align: left;">💡 Klik gambar bukti untuk melihat tampilan layar penuh.</p>
+                <div id="inbox-list" style="max-height: 220px; overflow-y: auto;"></div>
+                <button onclick="clearInbox()" class="btn btn-danger" style="margin-top: 10px; padding: 8px; font-size: 11px;">Hapus Semua Inbox</button>
+            </div>
+        </section>
+    </main>
+
+    <!-- ================= MODAL FULL IMAGE PREVIEW ================= -->
+    <div id="image-modal" class="image-modal hidden">
+        <img id="modal-img-src" src="" class="modal-content-img" alt="Full Proof">
+        <button onclick="closeImageModal()" class="btn btn-secondary" style="margin-top: 16px; width: auto; padding: 8px 24px;">Tutup Gambar ✖</button>
+    </div>
+
+    <footer>
+        Truth or Dare Pro • Dibuat di Acode
+    </footer>
+
+    <script>
+        // --- DATABASE PERTANYAAN (20 TRUTH & 20 DARE) ---
+        let questions = JSON.parse(localStorage.getItem('tod_questions_db')) || [
+            // 20 Truth
+            { id: 1, type: 'truth', text: 'Apa hal paling memalukan yang pernah kamu lakukan di depan umum?' },
+            { id: 2, type: 'truth', text: 'Siapa orang yang diam-diam paling sering kamu perhatikan akhir-akhir ini?' },
+            { id: 3, type: 'truth', text: 'Apa ketakutan terbesar yang belum pernah kamu ceritakan ke siapa pun?' },
+            { id: 4, type: 'truth', text: 'Pernahkah kamu sengaja membohongi sahabat dekatmu? Apa alasannya?' },
+            { id: 5, type: 'truth', text: 'Apa mimpi atau hal konyol yang ingin kamu wujudkan tahun ini?' },
+            { id: 6, type: 'truth', text: 'Apa kebiasaan aneh yang sering kamu lakukan saat sendirian di kamar?' },
+            { id: 7, type: 'truth', text: 'Siapa mantan terindah atau orang yang paling susah kamu lupakan?' },
+            { id: 8, type: 'truth', text: 'Pernahkah kamu ketahuan tidur saat jam pelajaran atau jam kerja?' },
+            { id: 9, type: 'truth', text: 'Apa barang paling aneh atau berharga yang masih kamu simpan sampai sekarang?' },
+            { id: 10, type: 'truth', text: 'Kalau kamu bisa menukar hidup dengan seseorang selama sehari, siapa orang itu?' },
+            { id: 11, type: 'truth', text: 'Apa hal yang paling kamu sesali yang terjadi di tahun lalu?' },
+            { id: 12, type: 'truth', text: 'Sebutkan satu hal tentang dirimu yang jarang diketahui orang lain!' },
+            { id: 13, type: 'truth', text: 'Pernahkah kamu pura-pura sakit agar tidak perlu pergi ke suatu tempat?' },
+            { id: 14, type: 'truth', text: 'Siapa artis atau publik figur yang jadi tipe ideal kamu?' },
+            { id: 15, type: 'truth', text: 'Apa chat terakhir di WhatsApp yang sengaja tidak kamu balas?' },
+            { id: 16, type: 'truth', text: 'Pernahkah kamu ngobrol sendiri atau senyum-senyum sendiri gara-gara mikirin sesuatu?' },
+            { id: 17, type: 'truth', text: 'Apa hal terbodoh yang kamu lakukan demi mendapatkan perhatian seseorang?' },
+            { id: 18, type: 'truth', text: 'Kalau diberi kesempatan mengubah satu keputusan masa lalu, apa yang kamu ubah?' },
+            { id: 19, type: 'truth', text: 'Apa makanan teraneh yang pernah kamu coba dan rasanya ternyata enak?' },
+            { id: 20, type: 'truth', text: 'Apa rahasia kecil yang sampai sekarang masih kamu sembunyikan dari orang tua?' },
+
+            // 20 Dare
+            { id: 21, type: 'dare', text: 'Kirim chat random "Aku punya rahasia besar" ke kontak ke-3 di HP kamu!' },
+            { id: 22, type: 'dare', text: 'Foto selfie dengan muka paling jelek lalu unggah sebagai bukti!' },
+            { id: 23, type: 'dare', text: 'Telepon seseorang, lalu ucapkan "Selamat pagi" (padahal malam hari).' },
+            { id: 24, type: 'dare', text: 'Buat video singkat berdurasi 5 detik sedang bernyanyi lagu daerah dengan gaya lucu.' },
+            { id: 25, type: 'dare', text: 'Unggah foto makanan atau minuman terdekat di sekitar kamu sekarang.' },
+            { id: 26, type: 'dare', text: 'Kirim emoji hati (❤️) ke status atau story teman pertama yang muncul di HP-mu.' },
+            { id: 27, type: 'dare', text: 'Ucapkan kalimat "Aku cinta kamu, Domba!" dengan suara lantang di tempat kamu berada.' },
+            { id: 28, type: 'dare', text: 'Tulis nama lengkapmu menggunakan tangan kiri (atau tangan non-lalu) di kertas lalu foto.' },
+            { id: 29, type: 'dare', text: 'Kirim voice note ke admin menyanyikan lagu ulang tahun dengan nada sedih.' },
+            { id: 30, type: 'dare', text: 'Ganti status bio profil WhatsApp menjadi "Aku sedang dikendalikan game ini" selama 1 jam.' },
+            { id: 31, type: 'dare', text: 'Ambil foto pemandangan langit di luar rumahmu saat ini lalu kirimkan sebagai bukti.' },
+            { id: 32, type: 'dare', text: 'Kirim stiker paling alay atau lucu ke grup chat aktif terakhirmu.' },
+            { id: 33, type: 'dare', text: 'Lakukan gerakan peregangan badan (stretching) terlucu selama 10 detik.' },
+            { id: 34, type: 'dare', text: 'Ketik pesan menggunakan huruf kapital semua di kolom jawaban ini selama 3 kalimat.' },
+            { id: 35, type: 'dare', text: 'Tunjukkan foto galeri paling bawah atau paling lama di HP kamu.' },
+            { id: 36, type: 'dare', text: 'Minum satu gelas air putih dalam waktu 10 detik tanpa henti.' },
+            { id: 37, type: 'dare', text: 'Tuliskan pujian tulus untuk pembuat web ini di kolom respon.' },
+            { id: 38, type: 'dare', text: 'Tutup matamu, lalu ketik sembarang kata di kolom jawaban tanpa melihat layar.' },
+            { id: 39, type: 'dare', text: 'Buat gaya pose pahlawan (superhero pose) di depan cermin lalu foto buktinya.' },
+            { id: 40, type: 'dare', text: 'Kirim pesan teks "Tolong belikan aku es krim" ke anggota keluarga terdekatmu.' }
+        ];
+
+        let answers = JSON.parse(localStorage.getItem('tod_answers_db')) || [];
+        let currentActiveQuestion = null;
+
+        function switchRole() {
+            document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
+            document.getElementById('page-role').classList.remove('hidden');
+            document.getElementById('admin-login-box').classList.add('hidden');
+            document.getElementById('role-badge').innerText = "🎲 Truth or Dare";
+        }
+
+        function enterPlayer() {
+            document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
+            document.getElementById('page-player').classList.remove('hidden');
+            document.getElementById('role-badge').innerText = "🎮 Mode Teman (Player)";
+        }
+
+        function showAdminLogin() {
+            document.getElementById('admin-login-box').classList.remove('hidden');
+        }
+
+        function verifyAdminPassword() {
+            const pass = document.getElementById('admin-pass').value;
+            if (pass === '1234') { // Password Admin
+                document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
+                document.getElementById('page-admin').classList.remove('hidden');
+                document.getElementById('role-badge').innerText = "⚙️ Mode Admin";
+                document.getElementById('admin-pass').value = '';
+                renderCrudList();
+            } else {
+                alert('Password Admin Salah! (Default: 1234)');
+            }
+        }
+
+        // --- LOGIKA PLAYER ---
+        function getChallenge(type) {
+            const filtered = questions.filter(q => q.type === type);
+            const box = document.getElementById('challenge-box');
+            const form = document.getElementById('answer-form');
+            const photoSection = document.getElementById('photo-upload-section');
+            const label = document.getElementById('input-label');
+            const btnTruth = document.getElementById('btn-truth');
+            const btnDare = document.getElementById('btn-dare');
+            const lockMsg = document.getElementById('lock-msg');
+
+            if (filtered.length === 0) {
+                box.innerText = "Belum ada pertanyaan untuk kategori ini.";
+                form.classList.add('hidden');
+                return;
+            }
+
+           <option value="truth">Truth (Kejujuran)</option>
                         <option value="dare">Dare (Tantangan)</option>
                     </select>
 
